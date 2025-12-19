@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Spedizioni Uniche</title>
+    <title>CONTROLLO PARTENZE - Riepilogo Totale</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
         .container { max-width: 1400px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h1 { color: #1a73e8; margin-top: 0; border-bottom: 2px solid #1a73e8; padding-bottom: 10px; }
         #drop-area { border: 3px dashed #1a73e8; border-radius: 15px; padding: 30px; text-align: center; background: #f8fbff; cursor: pointer; margin-bottom: 20px; }
-        .actions { margin-bottom: 20px; display: flex; align-items: center; gap: 15px; }
+        .actions { margin-bottom: 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
         .btn-export { background-color: #27ae60; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; display: none; font-weight: bold; }
-        .stat-box { background: #e8f0fe; color: #1a73e8; padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #d2e3fc; }
+        .stat-box { background: #e8f0fe; color: #1a73e8; padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #d2e3fc; min-width: 180px; text-align: center; }
         .table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 750px; }
         table { border-collapse: collapse; width: 100%; background: white; white-space: pre; }
         td { padding: 8px; border: 1px solid #ddd; font-size: 12px; }
@@ -29,6 +29,7 @@
     </div>
     <div class="actions">
         <button id="exportBtn" class="btn-export" onclick="exportData()">📥 Esporta Excel Pulito</button>
+        <div id="statColli" class="stat-box" style="display:none;">Quantità Colli: 0</div>
         <div id="statSpedizioni" class="stat-box" style="display:none;">Quantità Spedizioni: 0</div>
     </div>
     <div id="tableWrapper" class="table-wrapper" style="display:none;">
@@ -78,8 +79,8 @@
         body.innerHTML = "";
         processedDataForExport = [];
         
-        // Utilizziamo un Set per memorizzare i valori unici della colonna B
         let spedizioniUniche = new Set();
+        let totaleColli = 0;
         let tableRowCounter = 0;
 
         lines.forEach((line, idx) => {
@@ -87,30 +88,26 @@
 
             let rowValues = activeColumns.map(c => line.substring(c.start, c.end).trim());
 
-            // Filtri base (Autista e Sig)
             let autistaColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("autista") || c.label.toLowerCase().includes("oper"));
             if (idx > 5) {
                 if (autistaColIdx !== -1 && rowValues[autistaColIdx] === "") return;
                 if (rowValues.some(val => val.toLowerCase().includes("sig"))) return;
             }
 
-            // 1. ELIMINA RIGA 1 (ex riga 5 intestazioni)
-            if (idx === 4) return;
+            if (idx === 4) return; // Elimina riga 1 (vecchia R5)
 
             tableRowCounter++;
 
-            // 5. FILTRO V8 (Dalla riga 3 della tabella risultante)
             if (tableRowCounter >= 3) {
                 if (!rowValues[0] || !rowValues[0].includes("V8")) return;
             }
 
-            // 2, 3, 4. ELIMINA COLONNE C, F, H (Indici 2, 5, 7 dell'array filtrato iniziale)
             let finalRowValues = rowValues.filter((_, i) => i !== 2 && i !== 5 && i !== 7);
 
-            // LOGICA CONTATORE UNIVOCO COLONNA B:
-            // finalRowValues[1] è la colonna B. Se non è vuota, la aggiungiamo al Set.
+            // LOGICA CONTATORI (Colonna B è finalRowValues[1])
             if (idx > 5 && finalRowValues[1] && finalRowValues[1].trim() !== "") {
-                spedizioniUniche.add(finalRowValues[1].trim());
+                totaleColli++; // Conta ogni riga piena
+                spedizioniUniche.add(finalRowValues[1].trim()); // Conta i codici diversi
             }
 
             const tr = document.createElement('tr');
@@ -126,16 +123,19 @@
 
         document.getElementById('tableWrapper').style.display = "block";
         document.getElementById('exportBtn').style.display = "inline-block";
-        document.getElementById('statSpedizioni').style.display = "block";
         
-        // Il risultato del contatore è la dimensione del Set (elementi unici)
+        // Aggiornamento Box Statistiche
+        document.getElementById('statColli').style.display = "block";
+        document.getElementById('statColli').innerText = `Quantità Colli: ${totaleColli}`;
+        
+        document.getElementById('statSpedizioni').style.display = "block";
         document.getElementById('statSpedizioni').innerText = `Quantità Spedizioni: ${spedizioniUniche.size}`;
     }
 
     function exportData() {
         const ws = XLSX.utils.aoa_to_sheet(processedDataForExport);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Export");
+        XLSX.utils.book_append_sheet(wb, ws, "Dati");
         XLSX.writeFile(wb, "Controllo_Partenze_Final.xlsx");
     }
 </script>
