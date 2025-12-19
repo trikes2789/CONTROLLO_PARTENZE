@@ -3,19 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Filtro Sede</title>
+    <title>CONTROLLO PARTENZE - Filtri Avanzati</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
         .container { max-width: 1400px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h1 { color: #1a73e8; margin-top: 0; border-bottom: 2px solid #1a73e8; padding-bottom: 10px; }
         #drop-area { border: 3px dashed #1a73e8; border-radius: 15px; padding: 30px; text-align: center; background: #f8fbff; cursor: pointer; margin-bottom: 20px; }
-        .filter-box { margin-bottom: 20px; padding: 15px; background: #fffde7; border: 1px solid #fff59d; border-radius: 8px; display: none; }
-        .filter-box label { font-weight: bold; margin-right: 10px; color: #827717; }
-        .filter-box input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 200px; }
+        
+        .filter-section { display: none; margin-bottom: 20px; padding: 15px; background: #fffde7; border: 1px solid #fff59d; border-radius: 8px; }
+        .filter-group { display: inline-block; margin-right: 20px; }
+        .filter-group label { font-weight: bold; display: block; margin-bottom: 5px; color: #827717; font-size: 0.9rem; }
+        .filter-group input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 220px; }
+
         .actions { margin-bottom: 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
         .btn-export { background-color: #27ae60; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; display: none; font-weight: bold; }
         .stat-box { background: #e8f0fe; color: #1a73e8; padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #d2e3fc; min-width: 180px; text-align: center; }
+        
         .table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 750px; }
         table { border-collapse: collapse; width: 100%; background: white; white-space: pre; }
         td { padding: 8px; border: 1px solid #ddd; font-size: 12px; }
@@ -32,9 +36,15 @@
         <input type="file" id="fileElem" style="display:none" onchange="handleFiles(this.files)">
     </div>
 
-    <div id="filterContainer" class="filter-box">
-        <label for="sedeFilter">Conteggio Sede Destinataria (Col. E):</label>
-        <input type="text" id="sedeFilter" placeholder="Inserisci sede..." oninput="applySedeFilter()">
+    <div id="filterSection" class="filter-section">
+        <div class="filter-group">
+            <label>Conteggio Sede Destinataria (Col. E)</label>
+            <input type="text" id="sedeFilter" placeholder="Filtra per sede..." oninput="applyAllFilters()">
+        </div>
+        <div class="filter-group">
+            <label>Conteggio Per Autista (Col. I)</label>
+            <input type="text" id="autistaFilter" placeholder="Filtra per autista..." oninput="applyAllFilters()">
+        </div>
     </div>
 
     <div class="actions">
@@ -120,7 +130,6 @@
             
             body.appendChild(tr);
             
-            // Salviamo l'oggetto riga per il filtro dinamico
             allProcessedRows.push({
                 values: finalRowValues,
                 element: tr,
@@ -130,26 +139,30 @@
 
         document.getElementById('tableWrapper').style.display = "block";
         document.getElementById('exportBtn').style.display = "inline-block";
-        document.getElementById('filterContainer').style.display = "block";
+        document.getElementById('filterSection').style.display = "block";
         document.getElementById('statColli').style.display = "block";
         document.getElementById('statSpedizioni').style.display = "block";
         
-        applySedeFilter(); // Inizializza i contatori
+        applyAllFilters();
     }
 
-    function applySedeFilter() {
-        const filterValue = document.getElementById('sedeFilter').value.toLowerCase().trim();
+    function applyAllFilters() {
+        const sedeTerm = document.getElementById('sedeFilter').value.toLowerCase().trim();
+        const autistaTerm = document.getElementById('autistaFilter').value.toLowerCase().trim();
+        
         let totalColli = 0;
         let spedizioniUniche = new Set();
 
         allProcessedRows.forEach(row => {
-            // Colonna E è l'indice 4 (A=0, B=1, C=2, D=3, E=4)
-            const sedeValue = row.values[4] ? row.values[4].toLowerCase() : "";
-            const matchesFilter = filterValue === "" || sedeValue.includes(filterValue);
+            // Indice 4 = Colonna E, Indice 8 = Colonna I
+            const valSede = row.values[4] ? row.values[4].toLowerCase() : "";
+            const valAutista = row.values[8] ? row.values[8].toLowerCase() : "";
 
-            if (matchesFilter) {
+            const matchesSede = sedeTerm === "" || valSede.includes(sedeTerm);
+            const matchesAutista = autistaTerm === "" || valAutista.includes(autistaTerm);
+
+            if (matchesSede && matchesAutista) {
                 row.element.classList.remove('hidden-row');
-                // Aggiorna contatori solo per le righe dati visibili
                 if (row.isData && row.values[1] && row.values[1] !== "") {
                     totalColli++;
                     spedizioniUniche.add(row.values[1].trim());
@@ -171,7 +184,7 @@
         const ws = XLSX.utils.aoa_to_sheet(visibleData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Dati_Filtrati");
-        XLSX.writeFile(wb, "Controllo_Partenze_Sede.xlsx");
+        XLSX.writeFile(wb, "Controllo_Partenze_Export.xlsx");
     }
 </script>
 </body>
