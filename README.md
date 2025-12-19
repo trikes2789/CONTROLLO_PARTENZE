@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Definitivo</title>
+    <title>CONTROLLO PARTENZE - Configurazione Finale</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
@@ -46,11 +46,11 @@
     let processedDataForExport = []; 
     let activeColumns = [];
 
-    // ELENCO COLONNE DA ELIMINARE
+    // LISTA AGGIORNATA: Eliminata E/U dalle esclusioni, aggiunta P.to Part.
     const colonneDaEscludere = [
         "Collo T P.to P.to Pa", "T P.to P.to Part.", "P.to P.to Part. A", 
-        "P.to Part. A Sed", "Sede Dest. I R E/U", "R E/U Autista Mit", 
-        "Mittente Ora.", "Ora."
+        "P.to Part. A Sed", "P.to Part.", "Sede Dest. I R", 
+        "R E/U Autista Mit", "Mittente Ora.", "Ora."
     ];
 
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => dropArea.addEventListener(e, (ev) => ev.preventDefault()));
@@ -73,16 +73,15 @@
         const regex = /-+/g; 
         let match;
 
-        // Identificazione righello
         while ((match = regex.exec(line6_ruler)) !== null) {
             let label = line5_names.substring(match.index, match.index + match[0].length + 2).trim();
             rawColumns.push({ label: label || "Colonna", start: match.index, end: match.index + match[0].length + 1 });
         }
         if(rawColumns.length > 0) rawColumns[rawColumns.length - 1].end = 2000;
 
-        // FILTRO COLONNE (APPLICATO QUI)
+        // Filtro colonne migliorato
         activeColumns = rawColumns.filter(c => {
-            return !colonneDaEscludere.some(esclusa => c.label.includes(esclusa) || esclusa.includes(c.label));
+            return !colonneDaEscludere.some(esclusa => c.label === esclusa || c.label.includes(esclusa));
         });
 
         const body = document.getElementById('tableBody');
@@ -97,19 +96,18 @@
         let nSpedColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("n.sped"));
 
         lines.forEach((line, idx) => {
-            // 1. ELIMINA DALLA RIGA 4 IN SU (mostra solo dalla 5 [idx 4] in poi)
+            // Elimina righe superiori alla 5 e la riga del righello
             if (idx < 4 || idx === 5 || line.trim() === "") return;
 
             let rowValues = activeColumns.map(c => line.substring(c.start, c.end).trim());
 
-            // 2. FILTRI RIGHE (dalla riga 7 in poi)
             if (idx > 5) {
-                // Filtro Autista Vuoto
+                // Filtro Autista vuoto
                 if (autistaColIdx !== -1 && rowValues[autistaColIdx] === "") return;
                 // Filtro parola "Sig"
                 if (rowValues.some(val => val.toLowerCase().includes("sig"))) return;
                 
-                // CONTEGGIO QUANTITÀ COLLI (Celle piene in N.Sped)
+                // Conteggio Quantità Colli su N.Sped
                 if (nSpedColIdx !== -1 && rowValues[nSpedColIdx] !== "") {
                     countColliValidi++;
                 }
