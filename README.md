@@ -3,20 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Configurazione Finale</title>
+    <title>CONTROLLO PARTENZE - Pulizia Specifica</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
         .container { max-width: 1400px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h1 { color: #1a73e8; margin-top: 0; border-bottom: 2px solid #1a73e8; padding-bottom: 10px; }
         #drop-area { border: 3px dashed #1a73e8; border-radius: 15px; padding: 30px; text-align: center; background: #f8fbff; cursor: pointer; margin-bottom: 20px; }
-        #drop-area.highlight { background: #e1efff; }
         .actions { margin-bottom: 20px; display: flex; align-items: center; gap: 15px; }
         .btn-export { background-color: #27ae60; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; display: none; font-weight: bold; }
         .stat-box { background: #e8f0fe; color: #1a73e8; padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #d2e3fc; }
         .table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 750px; }
         table { border-collapse: collapse; width: 100%; background: white; white-space: pre; }
-        th { background-color: #1a73e8; color: white; padding: 12px; position: sticky; top: 0; z-index: 10; border: 1px solid #ddd; font-size: 11px; text-align: left; }
         td { padding: 8px; border: 1px solid #ddd; font-size: 12px; }
         tr:nth-child(even) { background-color: #f9f9f9; }
     </style>
@@ -30,12 +28,11 @@
         <input type="file" id="fileElem" style="display:none" onchange="handleFiles(this.files)">
     </div>
     <div class="actions">
-        <button id="exportBtn" class="btn-export" onclick="exportData()">📥 Esporta Excel</button>
+        <button id="exportBtn" class="btn-export" onclick="exportData()">📥 Esporta Excel Pulito</button>
         <div id="statColli" class="stat-box" style="display:none;">Quantità Colli: 0</div>
     </div>
     <div id="tableWrapper" class="table-wrapper" style="display:none;">
         <table id="mainTable">
-            <thead id="tableHead"></thead>
             <tbody id="tableBody"></tbody>
         </table>
     </div>
@@ -44,10 +41,8 @@
 <script>
     let dropArea = document.getElementById('drop-area');
     let processedDataForExport = []; 
-    let activeColumns = [];
 
-    // LISTA AGGIORNATA: Eliminata E/U dalle esclusioni, aggiunta P.to Part.
-    const colonneDaEscludere = [
+    const colonneDaEscludereIniziali = [
         "Collo T P.to P.to Pa", "T P.to P.to Part.", "P.to P.to Part. A", 
         "P.to Part. A Sed", "P.to Part.", "Sede Dest. I R", 
         "R E/U Autista Mit", "Mittente Ora.", "Ora."
@@ -65,8 +60,6 @@
 
     function processContent(text) {
         const lines = text.split(/\r?\n/);
-        if (lines.length < 6) return alert("File non valido");
-
         const line5_names = lines[4]; 
         const line6_ruler = lines[5]; 
         let rawColumns = [];
@@ -79,51 +72,58 @@
         }
         if(rawColumns.length > 0) rawColumns[rawColumns.length - 1].end = 2000;
 
-        // Filtro colonne migliorato
-        activeColumns = rawColumns.filter(c => {
-            return !colonneDaEscludere.some(esclusa => c.label === esclusa || c.label.includes(esclusa));
-        });
+        let activeColumns = rawColumns.filter(c => !colonneDaEscludereIniziali.some(esc => c.label.includes(esc)));
 
         const body = document.getElementById('tableBody');
-        const head = document.getElementById('tableHead');
-        head.innerHTML = "<tr>" + activeColumns.map(c => `<th>${c.label}</th>`).join('') + "</tr>";
         body.innerHTML = "";
-        
         processedDataForExport = [];
         let countColliValidi = 0;
+        let rowCounter = 0;
 
-        let autistaColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("autista") || c.label.toLowerCase().includes("oper"));
+        // Indici per filtri post-elaborazione
         let nSpedColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("n.sped"));
 
         lines.forEach((line, idx) => {
-            // Elimina righe superiori alla 5 e la riga del righello
             if (idx < 4 || idx === 5 || line.trim() === "") return;
 
             let rowValues = activeColumns.map(c => line.substring(c.start, c.end).trim());
 
+            // Filtri base (Autista e Sig)
+            let autistaColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("autista") || c.label.toLowerCase().includes("oper"));
             if (idx > 5) {
-                // Filtro Autista vuoto
                 if (autistaColIdx !== -1 && rowValues[autistaColIdx] === "") return;
-                // Filtro parola "Sig"
                 if (rowValues.some(val => val.toLowerCase().includes("sig"))) return;
-                
-                // Conteggio Quantità Colli su N.Sped
-                if (nSpedColIdx !== -1 && rowValues[nSpedColIdx] !== "") {
-                    countColliValidi++;
-                }
+            }
+
+            // 1. ELIMINA RIGA 1 (la vecchia riga 5 delle intestazioni)
+            if (idx === 4) return;
+
+            // Incrementiamo il contatore delle righe effettive in tabella
+            rowCounter++;
+
+            // 5. FILTRO V8 (Dalla riga 3 in giù della tabella risultante)
+            if (rowCounter >= 3) {
+                if (!rowValues[0].includes("V8")) return;
+            }
+
+            // 2, 3, 4. ELIMINA COLONNE C, F, H (Indici 2, 5, 7)
+            // Filtriamo l'array dei valori riga per saltare quegli indici
+            let finalRowValues = rowValues.filter((_, i) => i !== 2 && i !== 5 && i !== 7);
+
+            // Conteggio colli su N.Sped (adattando l'indice se necessario, usiamo rowValues originale per sicurezza)
+            if (idx > 5 && nSpedColIdx !== -1 && rowValues[nSpedColIdx] !== "") {
+                countColliValidi++;
             }
 
             const tr = document.createElement('tr');
-            let exportRow = {};
-            rowValues.forEach((val, i) => {
+            finalRowValues.forEach(val => {
                 const td = document.createElement('td');
                 td.innerText = val;
                 tr.appendChild(td);
-                exportRow[activeColumns[i].label] = val;
             });
             
             body.appendChild(tr);
-            processedDataForExport.push(exportRow);
+            processedDataForExport.push(finalRowValues);
         });
 
         document.getElementById('tableWrapper').style.display = "block";
@@ -133,10 +133,10 @@
     }
 
     function exportData() {
-        const ws = XLSX.utils.json_to_sheet(processedDataForExport);
+        const ws = XLSX.utils.aoa_to_sheet(processedDataForExport);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Dati");
-        XLSX.writeFile(wb, "Controllo_Partenze.xlsx");
+        XLSX.utils.book_append_sheet(wb, ws, "Export");
+        XLSX.writeFile(wb, "Controllo_Partenze_Filtrato.xlsx");
     }
 </script>
 </body>
