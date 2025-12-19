@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Logica Colonna B</title>
+    <title>CONTROLLO PARTENZE - Spedizioni Uniche</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
@@ -29,7 +29,7 @@
     </div>
     <div class="actions">
         <button id="exportBtn" class="btn-export" onclick="exportData()">📥 Esporta Excel Pulito</button>
-        <div id="statColli" class="stat-box" style="display:none;">Quantità Colli: 0</div>
+        <div id="statSpedizioni" class="stat-box" style="display:none;">Quantità Spedizioni: 0</div>
     </div>
     <div id="tableWrapper" class="table-wrapper" style="display:none;">
         <table id="mainTable">
@@ -77,7 +77,9 @@
         const body = document.getElementById('tableBody');
         body.innerHTML = "";
         processedDataForExport = [];
-        let countColliB = 0;
+        
+        // Utilizziamo un Set per memorizzare i valori unici della colonna B
+        let spedizioniUniche = new Set();
         let tableRowCounter = 0;
 
         lines.forEach((line, idx) => {
@@ -102,13 +104,13 @@
                 if (!rowValues[0] || !rowValues[0].includes("V8")) return;
             }
 
-            // 2, 3, 4. ELIMINA COLONNE C, F, H (Indici 2, 5, 7)
+            // 2, 3, 4. ELIMINA COLONNE C, F, H (Indici 2, 5, 7 dell'array filtrato iniziale)
             let finalRowValues = rowValues.filter((_, i) => i !== 2 && i !== 5 && i !== 7);
 
-            // LOGICA CONTATORE COLLI: Conta se la colonna B (indice 1) della riga finale è piena
-            // Consideriamo valide le righe dei dati (idx > 5)
+            // LOGICA CONTATORE UNIVOCO COLONNA B:
+            // finalRowValues[1] è la colonna B. Se non è vuota, la aggiungiamo al Set.
             if (idx > 5 && finalRowValues[1] && finalRowValues[1].trim() !== "") {
-                countColliB++;
+                spedizioniUniche.add(finalRowValues[1].trim());
             }
 
             const tr = document.createElement('tr');
@@ -124,8 +126,10 @@
 
         document.getElementById('tableWrapper').style.display = "block";
         document.getElementById('exportBtn').style.display = "inline-block";
-        document.getElementById('statColli').style.display = "block";
-        document.getElementById('statColli').innerText = `Quantità Colli: ${countColliB}`;
+        document.getElementById('statSpedizioni').style.display = "block";
+        
+        // Il risultato del contatore è la dimensione del Set (elementi unici)
+        document.getElementById('statSpedizioni').innerText = `Quantità Spedizioni: ${spedizioniUniche.size}`;
     }
 
     function exportData() {
