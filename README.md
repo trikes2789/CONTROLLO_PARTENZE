@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Pulizia Avanzata</title>
+    <title>CONTROLLO PARTENZE - Riepilogo</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
@@ -16,17 +16,16 @@
         }
         #drop-area.highlight { background: #e1efff; }
 
-        .actions { margin-bottom: 20px; display: flex; align-items: center; gap: 20px; }
+        .actions { margin-bottom: 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
         .btn-export { background-color: #27ae60; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; display: none; font-weight: bold; }
-        #counter { font-weight: bold; color: #1a73e8; background: #e8f0fe; padding: 8px 15px; border-radius: 20px; }
         
-        .table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 750px; }
+        .stat-box { background: #e8f0fe; color: #1a73e8; padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #d2e3fc; }
+        
+        .table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 700px; }
         table { border-collapse: collapse; width: 100%; background: white; white-space: pre; }
         th { background-color: #1a73e8; color: white; padding: 12px; position: sticky; top: 0; z-index: 10; border: 1px solid #ddd; font-size: 11px; text-align: left; }
         td { padding: 8px; border: 1px solid #ddd; font-size: 12px; }
         tr:nth-child(even) { background-color: #f9f9f9; }
-        
-        .row-header-r5 { background-color: #e3f2fd !important; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -40,8 +39,8 @@
     </div>
 
     <div class="actions">
-        <button id="exportBtn" class="btn-export" onclick="exportData()">📥 Esporta in Excel (.xlsx)</button>
-        <div id="counter"></div>
+        <button id="exportBtn" class="btn-export" onclick="exportData()">📥 Esporta Excel</button>
+        <div id="statColli" class="stat-box" style="display:none;">Quantità Colli: 0</div>
     </div>
 
     <div id="tableWrapper" class="table-wrapper" style="display:none;">
@@ -84,55 +83,49 @@
         const regex = /-+/g; 
         let match;
 
-        // 1. Usa la RIGA 6 per le coordinate
+        // 1. Righello dalla R6
         while ((match = regex.exec(line6_ruler)) !== null) {
             let label = line5_names.substring(match.index, match.index + match[0].length + 2).trim();
-            rawColumns.push({ 
-                label: label || "Colonna", 
-                start: match.index,
-                end: match.index + match[0].length + 1
-            });
+            rawColumns.push({ label: label || "Colonna", start: match.index, end: match.index + match[0].length + 1 });
         }
         if(rawColumns.length > 0) rawColumns[rawColumns.length - 1].end = 2000;
 
-        activeColumns = rawColumns.filter(c => {
-            return !colonneDaEscludere.some(esclusa => c.label.includes(esclusa) || esclusa.includes(c.label));
-        });
+        activeColumns = rawColumns.filter(c => !colonneDaEscludere.some(esc => c.label.includes(esc)));
 
         const body = document.getElementById('tableBody');
         const head = document.getElementById('tableHead');
         
         head.innerHTML = "<tr>" + activeColumns.map(c => `<th>${c.label}</th>`).join('') + "</tr>";
         body.innerHTML = "";
+        
         processedDataForExport = [];
+        let countNSped = 0;
 
+        // Indici colonne chiave
         let autistaColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("autista") || c.label.toLowerCase().includes("oper"));
+        let nSpedColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("n.sped"));
 
         lines.forEach((line, idx) => {
-            if (line.trim() === "") return;
-            
-            let rowValues = activeColumns.map(c => line.substring(c.start, c.end).trim());
-            
-            // LOGICA DI FILTRAGGIO (Dalla riga 7 in poi, indice > 5)
-            if (idx > 5) {
-                // 1. Salta se la colonna Autista è vuota
-                if (autistaColIdx !== -1 && rowValues[autistaColIdx] === "") return;
-                
-                // 2. Salta se in qualsiasi colonna è presente la parola "Sig" (Case Insensitive)
-                const contieneSig = rowValues.some(val => val.toLowerCase() === "sig" || val.toLowerCase().includes("sig."));
-                if (contieneSig) return;
+            // ELIMINA DALLA RIGA 4 IN SU (mostra solo dalla riga 5 [idx 4] in poi)
+            if (idx < 4) return;
+            if (line.trim() === "" || idx === 5) return; // Salta righe vuote e righello
 
-                // 3. Salta righe di soli trattini
-                if (line.includes("-------")) return;
+            let rowValues = activeColumns.map(c => line.substring(c.start, c.end).trim());
+
+            // Filtri dati (dalla riga 7 in poi)
+            if (idx > 5) {
+                // Filtro Autista Vuoto
+                if (autistaColIdx !== -1 && rowValues[autistaColIdx] === "") return;
+                // Filtro "Sig"
+                if (rowValues.some(val => val.toLowerCase().includes("sig"))) return;
+                
+                // CONTEGGIO QUANTITÀ COLLI (Basato su N.Sped compilato)
+                if (nSpedColIdx !== -1 && rowValues[nSpedColIdx] !== "") {
+                    countNSped++;
+                }
             }
 
-            // Visualizzazione Tabella
             const tr = document.createElement('tr');
-            if (idx === 4) tr.className = "row-header-r5";
-            
-            // Non visualizziamo la riga 6 (trattini) nella tabella per pulizia
-            if (idx === 5) return;
-
             let exportRow = {};
             rowValues.forEach((val, i) => {
                 const td = document.createElement('td');
@@ -147,13 +140,14 @@
 
         document.getElementById('tableWrapper').style.display = "block";
         document.getElementById('exportBtn').style.display = "inline-block";
-        document.getElementById('counter').innerText = `Spedizioni validate: ${processedDataForExport.length - 1}`; // -1 per l'header
+        document.getElementById('statColli').style.display = "block";
+        document.getElementById('statColli').innerText = `Quantità Colli: ${countNSped}`;
     }
 
     function exportData() {
         const ws = XLSX.utils.json_to_sheet(processedDataForExport);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Spedizioni");
+        XLSX.utils.book_append_sheet(wb, ws, "Controllo");
         XLSX.writeFile(wb, "Controllo_Partenze.xlsx");
     }
 </script>
