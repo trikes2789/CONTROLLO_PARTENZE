@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Filtri Selezionati</title>
+    <title>CONTROLLO PARTENZE - Righello R6 e Intestazione R5</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
@@ -16,24 +16,18 @@
         }
         #drop-area.highlight { background: #e1efff; }
 
-        .filter-section {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 12px; margin-bottom: 20px; padding: 15px;
-            background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; display: none;
-        }
-        .filter-group label { display: block; font-size: 0.75rem; font-weight: bold; color: #555; margin-bottom: 4px; text-transform: uppercase; }
-        .filter-group input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 13px; }
-
         .actions { margin-bottom: 20px; display: flex; align-items: center; gap: 20px; }
         .btn-export { background-color: #27ae60; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; display: none; font-weight: bold; }
         #counter { font-weight: bold; color: #1a73e8; background: #e8f0fe; padding: 8px 15px; border-radius: 20px; }
         
-        .table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 600px; }
+        .table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 750px; }
         table { border-collapse: collapse; width: 100%; background: white; white-space: pre; }
-        th { background-color: #1a73e8; color: white; padding: 12px; position: sticky; top: 0; z-index: 10; border: 1px solid #ddd; font-size: 11px; }
+        th { background-color: #1a73e8; color: white; padding: 12px; position: sticky; top: 0; z-index: 10; border: 1px solid #ddd; font-size: 11px; text-align: left; }
         td { padding: 8px; border: 1px solid #ddd; font-size: 12px; }
         tr:nth-child(even) { background-color: #f9f9f9; }
-        .hidden-row { display: none; }
+        
+        .row-header-r5 { background-color: #e3f2fd !important; font-weight: bold; }
+        .row-ruler-r6 { background-color: #f1f8e9 !important; color: #777; font-size: 10px; }
     </style>
 </head>
 <body>
@@ -46,10 +40,8 @@
         <input type="file" id="fileElem" style="display:none" onchange="handleFiles(this.files)">
     </div>
 
-    <div id="filterContainer" class="filter-section"></div>
-
     <div class="actions">
-        <button id="exportBtn" class="btn-export" onclick="exportFilteredData()">📥 Esporta in Excel (.xlsx)</button>
+        <button id="exportBtn" class="btn-export" onclick="exportData()">📥 Esporta in Excel (.xlsx)</button>
         <div id="counter"></div>
     </div>
 
@@ -63,10 +55,9 @@
 
 <script>
     let dropArea = document.getElementById('drop-area');
-    let allData = []; 
+    let processedDataForExport = []; 
     let activeColumns = [];
 
-    // Colonne da ELIMINARE (come richiesto)
     const colonneDaEscludere = [
         "Collo T P.to P.to Pa", "T P.to P.to Part.", "P.to P.to Part. A", 
         "P.to Part. A Sed", "Sede Dest. I R E/U", "R E/U Autista Mit", 
@@ -87,111 +78,83 @@
         const lines = text.split(/\r?\n/);
         if (lines.length < 6) return alert("File non valido");
 
-        const refLine = lines[5];
-        const filterNamesLine = lines[4]; 
+        const line5_names = lines[4]; // Nomi (Tipo Sped, N.Sped...)
+        const line6_ruler = lines[5]; // Righello (---- ----)
+        
         let rawColumns = [];
-        const regex = /\S+/g;
+        const regex = /-+/g; // Cerchiamo i blocchi di trattini
         let match;
 
-        // Estrazione iniziale di tutte le colonne
-        while ((match = regex.exec(refLine)) !== null) {
-            let label = filterNamesLine.substring(match.index, match.index + 25).trim() || match[0];
-            rawColumns.push({ label: label, start: match.index });
-        }
-        for (let i = 0; i < rawColumns.length; i++) {
-            rawColumns[i].end = rawColumns[i+1] ? rawColumns[i+1].start : 2000;
+        // 1. Usa la RIGA 6 (trattini) per trovare le coordinate
+        while ((match = regex.exec(line6_ruler)) !== null) {
+            // Per ogni blocco di trattini, prendiamo il nome corrispondente dalla RIGA 5
+            let label = line5_names.substring(match.index, match.index + match[0].length + 2).trim();
+            rawColumns.push({ 
+                label: label || "Colonna", 
+                start: match.index,
+                end: match.index + match[0].length + 1
+            });
         }
 
-        // FILTRO COLONNE: Teniamo solo quelle NON incluse nella lista nera
+        // Estendi l'ultimo campo per sicurezza
+        if(rawColumns.length > 0) rawColumns[rawColumns.length - 1].end = 2000;
+
+        // 2. Filtra le colonne da escludere
         activeColumns = rawColumns.filter(c => {
             return !colonneDaEscludere.some(esclusa => c.label.includes(esclusa) || esclusa.includes(c.label));
         });
 
-        // 2. Genera Filtri UI
-        const filterContainer = document.getElementById('filterContainer');
-        filterContainer.innerHTML = "";
-        activeColumns.forEach((col, idx) => {
-            const group = document.createElement('div');
-            group.className = 'filter-group';
-            group.innerHTML = `<label>${col.label}</label>
-                               <input type="text" data-idx="${idx}" placeholder="Cerca..." oninput="applyFilters()">`;
-            filterContainer.appendChild(group);
-        });
-        filterContainer.style.display = 'grid';
-
-        // 3. Carica Dati
-        allData = [];
         const body = document.getElementById('tableBody');
         const head = document.getElementById('tableHead');
+        
+        // Creazione testata HTML basata su R5
         head.innerHTML = "<tr>" + activeColumns.map(c => `<th>${c.label}</th>`).join('') + "</tr>";
         body.innerHTML = "";
+        processedDataForExport = [];
 
-        lines.slice(6).forEach(line => {
-            if (line.trim() === "" || line.includes("-------")) return;
-            
-            // Controllo colonna Autista (che solitamente è l'ultima rimasta o specifica)
-            // Cerchiamo l'indice della colonna che contiene "Autista" nel nome
-            let autistaColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("autista") || c.label.toLowerCase().includes("oper"));
-            let valAutista = line.substring(activeColumns[autistaColIdx].start, activeColumns[autistaColIdx].end).trim();
-            
-            if (valAutista === "") return; // Escludi se autista vuoto
+        // Trova l'indice della colonna autista tra quelle attive per il filtro
+        let autistaColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("autista") || c.label.toLowerCase().includes("oper"));
 
-            let rowObj = { _cells: [] };
+        lines.forEach((line, idx) => {
+            if (line.trim() === "") return;
+            
+            // Taglio della riga secondo le coordinate del righello
+            let rowValues = activeColumns.map(c => line.substring(c.start, c.end).trim());
+            
+            // Filtro autista vuoto (solo per le righe dei dati veri, idx > 5)
+            if (idx > 5) {
+                if (autistaColIdx !== -1 && rowValues[autistaColIdx] === "") return;
+                // Salta righe di separazione extra
+                if (line.includes("-------")) return;
+            }
+
             const tr = document.createElement('tr');
-            
-            activeColumns.forEach(c => {
-                let val = line.substring(c.start, c.end).trim();
-                rowObj._cells.push(val.toLowerCase());
+            if (idx === 4) tr.className = "row-header-r5";
+            if (idx === 5) tr.className = "row-ruler-r6";
+
+            let exportRow = {};
+            rowValues.forEach((val, i) => {
                 const td = document.createElement('td');
                 td.innerText = val;
                 tr.appendChild(td);
+                // Non includiamo la riga dei trattini nell'export Excel
+                if (idx !== 5) exportRow[activeColumns[i].label] = val;
             });
             
-            rowObj._el = tr;
             body.appendChild(tr);
-            allData.push(rowObj);
+            if (idx !== 5) processedDataForExport.push(exportRow);
         });
 
         document.getElementById('tableWrapper').style.display = "block";
         document.getElementById('exportBtn').style.display = "inline-block";
-        updateCounter();
+        document.getElementById('counter').innerText = `Righe elaborate: ${processedDataForExport.length}`;
     }
 
-    function applyFilters() {
-        const inputs = document.querySelectorAll('.filter-group input');
-        
-        allData.forEach(row => {
-            let isVisible = true;
-            inputs.forEach(input => {
-                const term = input.value.toLowerCase();
-                const idx = input.getAttribute('data-idx');
-                if (term && !row._cells[idx].includes(term)) {
-                    isVisible = false;
-                }
-            });
-            row._el.className = isVisible ? "" : "hidden-row";
-        });
-        updateCounter();
-    }
-
-    function updateCounter() {
-        const visibleCount = allData.filter(r => r._el.className !== "hidden-row").length;
-        document.getElementById('counter').innerText = `Spedizioni attive: ${visibleCount}`;
-    }
-
-    function exportFilteredData() {
-        const visibleData = allData.filter(row => row._el.className !== "hidden-row").map(row => {
-            let exportRow = {};
-            activeColumns.forEach((col, idx) => {
-                exportRow[col.label] = row._el.cells[idx].innerText;
-            });
-            return exportRow;
-        });
-
-        const ws = XLSX.utils.json_to_sheet(visibleData);
+    function exportData() {
+        const ws = XLSX.utils.json_to_sheet(processedDataForExport);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Dati");
-        XLSX.writeFile(wb, "Controllo_Partenze_Pulito.xlsx");
+        XLSX.utils.book_append_sheet(wb, ws, "Spedizioni");
+        XLSX.writeFile(wb, "Controllo_Partenze.xlsx");
     }
 </script>
 </body>
