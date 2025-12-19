@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Pulizia Specifica</title>
+    <title>CONTROLLO PARTENZE - Logica Colonna B</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
@@ -77,11 +77,8 @@
         const body = document.getElementById('tableBody');
         body.innerHTML = "";
         processedDataForExport = [];
-        let countColliValidi = 0;
-        let rowCounter = 0;
-
-        // Indici per filtri post-elaborazione
-        let nSpedColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("n.sped"));
+        let countColliB = 0;
+        let tableRowCounter = 0;
 
         lines.forEach((line, idx) => {
             if (idx < 4 || idx === 5 || line.trim() === "") return;
@@ -95,24 +92,23 @@
                 if (rowValues.some(val => val.toLowerCase().includes("sig"))) return;
             }
 
-            // 1. ELIMINA RIGA 1 (la vecchia riga 5 delle intestazioni)
+            // 1. ELIMINA RIGA 1 (ex riga 5 intestazioni)
             if (idx === 4) return;
 
-            // Incrementiamo il contatore delle righe effettive in tabella
-            rowCounter++;
+            tableRowCounter++;
 
-            // 5. FILTRO V8 (Dalla riga 3 in giù della tabella risultante)
-            if (rowCounter >= 3) {
-                if (!rowValues[0].includes("V8")) return;
+            // 5. FILTRO V8 (Dalla riga 3 della tabella risultante)
+            if (tableRowCounter >= 3) {
+                if (!rowValues[0] || !rowValues[0].includes("V8")) return;
             }
 
             // 2, 3, 4. ELIMINA COLONNE C, F, H (Indici 2, 5, 7)
-            // Filtriamo l'array dei valori riga per saltare quegli indici
             let finalRowValues = rowValues.filter((_, i) => i !== 2 && i !== 5 && i !== 7);
 
-            // Conteggio colli su N.Sped (adattando l'indice se necessario, usiamo rowValues originale per sicurezza)
-            if (idx > 5 && nSpedColIdx !== -1 && rowValues[nSpedColIdx] !== "") {
-                countColliValidi++;
+            // LOGICA CONTATORE COLLI: Conta se la colonna B (indice 1) della riga finale è piena
+            // Consideriamo valide le righe dei dati (idx > 5)
+            if (idx > 5 && finalRowValues[1] && finalRowValues[1].trim() !== "") {
+                countColliB++;
             }
 
             const tr = document.createElement('tr');
@@ -129,14 +125,14 @@
         document.getElementById('tableWrapper').style.display = "block";
         document.getElementById('exportBtn').style.display = "inline-block";
         document.getElementById('statColli').style.display = "block";
-        document.getElementById('statColli').innerText = `Quantità Colli: ${countColliValidi}`;
+        document.getElementById('statColli').innerText = `Quantità Colli: ${countColliB}`;
     }
 
     function exportData() {
         const ws = XLSX.utils.aoa_to_sheet(processedDataForExport);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Export");
-        XLSX.writeFile(wb, "Controllo_Partenze_Filtrato.xlsx");
+        XLSX.writeFile(wb, "Controllo_Partenze_Final.xlsx");
     }
 </script>
 </body>
