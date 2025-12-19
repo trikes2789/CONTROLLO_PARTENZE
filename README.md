@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Righello R6 e Intestazione R5</title>
+    <title>CONTROLLO PARTENZE - Pulizia Avanzata</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
@@ -27,7 +27,6 @@
         tr:nth-child(even) { background-color: #f9f9f9; }
         
         .row-header-r5 { background-color: #e3f2fd !important; font-weight: bold; }
-        .row-ruler-r6 { background-color: #f1f8e9 !important; color: #777; font-size: 10px; }
     </style>
 </head>
 <body>
@@ -78,16 +77,15 @@
         const lines = text.split(/\r?\n/);
         if (lines.length < 6) return alert("File non valido");
 
-        const line5_names = lines[4]; // Nomi (Tipo Sped, N.Sped...)
-        const line6_ruler = lines[5]; // Righello (---- ----)
+        const line5_names = lines[4]; 
+        const line6_ruler = lines[5]; 
         
         let rawColumns = [];
-        const regex = /-+/g; // Cerchiamo i blocchi di trattini
+        const regex = /-+/g; 
         let match;
 
-        // 1. Usa la RIGA 6 (trattini) per trovare le coordinate
+        // 1. Usa la RIGA 6 per le coordinate
         while ((match = regex.exec(line6_ruler)) !== null) {
-            // Per ogni blocco di trattini, prendiamo il nome corrispondente dalla RIGA 5
             let label = line5_names.substring(match.index, match.index + match[0].length + 2).trim();
             rawColumns.push({ 
                 label: label || "Colonna", 
@@ -95,11 +93,8 @@
                 end: match.index + match[0].length + 1
             });
         }
-
-        // Estendi l'ultimo campo per sicurezza
         if(rawColumns.length > 0) rawColumns[rawColumns.length - 1].end = 2000;
 
-        // 2. Filtra le colonne da escludere
         activeColumns = rawColumns.filter(c => {
             return !colonneDaEscludere.some(esclusa => c.label.includes(esclusa) || esclusa.includes(c.label));
         });
@@ -107,47 +102,52 @@
         const body = document.getElementById('tableBody');
         const head = document.getElementById('tableHead');
         
-        // Creazione testata HTML basata su R5
         head.innerHTML = "<tr>" + activeColumns.map(c => `<th>${c.label}</th>`).join('') + "</tr>";
         body.innerHTML = "";
         processedDataForExport = [];
 
-        // Trova l'indice della colonna autista tra quelle attive per il filtro
         let autistaColIdx = activeColumns.findIndex(c => c.label.toLowerCase().includes("autista") || c.label.toLowerCase().includes("oper"));
 
         lines.forEach((line, idx) => {
             if (line.trim() === "") return;
             
-            // Taglio della riga secondo le coordinate del righello
             let rowValues = activeColumns.map(c => line.substring(c.start, c.end).trim());
             
-            // Filtro autista vuoto (solo per le righe dei dati veri, idx > 5)
+            // LOGICA DI FILTRAGGIO (Dalla riga 7 in poi, indice > 5)
             if (idx > 5) {
+                // 1. Salta se la colonna Autista è vuota
                 if (autistaColIdx !== -1 && rowValues[autistaColIdx] === "") return;
-                // Salta righe di separazione extra
+                
+                // 2. Salta se in qualsiasi colonna è presente la parola "Sig" (Case Insensitive)
+                const contieneSig = rowValues.some(val => val.toLowerCase() === "sig" || val.toLowerCase().includes("sig."));
+                if (contieneSig) return;
+
+                // 3. Salta righe di soli trattini
                 if (line.includes("-------")) return;
             }
 
+            // Visualizzazione Tabella
             const tr = document.createElement('tr');
             if (idx === 4) tr.className = "row-header-r5";
-            if (idx === 5) tr.className = "row-ruler-r6";
+            
+            // Non visualizziamo la riga 6 (trattini) nella tabella per pulizia
+            if (idx === 5) return;
 
             let exportRow = {};
             rowValues.forEach((val, i) => {
                 const td = document.createElement('td');
                 td.innerText = val;
                 tr.appendChild(td);
-                // Non includiamo la riga dei trattini nell'export Excel
-                if (idx !== 5) exportRow[activeColumns[i].label] = val;
+                exportRow[activeColumns[i].label] = val;
             });
             
             body.appendChild(tr);
-            if (idx !== 5) processedDataForExport.push(exportRow);
+            processedDataForExport.push(exportRow);
         });
 
         document.getElementById('tableWrapper').style.display = "block";
         document.getElementById('exportBtn').style.display = "inline-block";
-        document.getElementById('counter').innerText = `Righe elaborate: ${processedDataForExport.length}`;
+        document.getElementById('counter').innerText = `Spedizioni validate: ${processedDataForExport.length - 1}`; // -1 per l'header
     }
 
     function exportData() {
