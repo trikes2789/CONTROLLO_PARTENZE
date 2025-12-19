@@ -3,18 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Filtri Avanzati</title>
+    <title>CONTROLLO PARTENZE - Filtri Verticali</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
         .container { max-width: 1400px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h1 { color: #1a73e8; margin-top: 0; border-bottom: 2px solid #1a73e8; padding-bottom: 10px; }
+        
         #drop-area { border: 3px dashed #1a73e8; border-radius: 15px; padding: 30px; text-align: center; background: #f8fbff; cursor: pointer; margin-bottom: 20px; }
         
-        .filter-section { display: none; margin-bottom: 20px; padding: 15px; background: #fffde7; border: 1px solid #fff59d; border-radius: 8px; }
-        .filter-group { display: inline-block; margin-right: 20px; }
-        .filter-group label { font-weight: bold; display: block; margin-bottom: 5px; color: #827717; font-size: 0.9rem; }
-        .filter-group input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 220px; }
+        /* Layout Filtri uno sotto l'altro */
+        .filter-section { display: none; margin-bottom: 20px; padding: 20px; background: #fffde7; border: 1px solid #fff59d; border-radius: 8px; }
+        .filter-group { margin-bottom: 15px; }
+        .filter-group:last-child { margin-bottom: 0; }
+        .filter-group label { font-weight: bold; display: block; margin-bottom: 5px; color: #827717; font-size: 0.95rem; }
+        .filter-group input { padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: 300px; font-size: 14px; }
 
         .actions { margin-bottom: 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
         .btn-export { background-color: #27ae60; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; display: none; font-weight: bold; }
@@ -38,17 +41,17 @@
 
     <div id="filterSection" class="filter-section">
         <div class="filter-group">
-            <label>Conteggio Sede Destinataria (Col. E)</label>
-            <input type="text" id="sedeFilter" placeholder="Filtra per sede..." oninput="applyAllFilters()">
+            <label for="sedeFilter">Conteggio Sede Destinataria (Colonna E)</label>
+            <input type="text" id="sedeFilter" placeholder="Es. VR, MI, RM..." oninput="applyAllFilters()">
         </div>
         <div class="filter-group">
-            <label>Conteggio Per Autista (Col. I)</label>
-            <input type="text" id="autistaFilter" placeholder="Filtra per autista..." oninput="applyAllFilters()">
+            <label for="autistaFilter">Conteggio Per Autista (Colonna I)</label>
+            <input type="text" id="autistaFilter" placeholder="Inserisci nome autista..." oninput="applyAllFilters()">
         </div>
     </div>
 
     <div class="actions">
-        <button id="exportBtn" class="btn-export" onclick="exportData()">📥 Esporta Excel</button>
+        <button id="exportBtn" class="btn-export" onclick="exportData()">📥 Esporta Excel Pulito</button>
         <div id="statColli" class="stat-box" style="display:none;">Quantità Colli: 0</div>
         <div id="statSpedizioni" class="stat-box" style="display:none;">Quantità Spedizioni: 0</div>
     </div>
@@ -183,7 +186,7 @@
 
         const ws = XLSX.utils.aoa_to_sheet(visibleData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Dati_Filtrati");
+        XLSX.utils.book_append_sheet(wb, ws, "Dati");
         XLSX.writeFile(wb, "Controllo_Partenze_Export.xlsx");
     }
 </script>
