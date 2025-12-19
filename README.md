@@ -3,48 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROLLO PARTENZE - Avanzato</title>
+    <title>CONTROLLO PARTENZE - Pulizia Autista</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
         .container { max-width: 1400px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        
         h1 { color: #1a73e8; margin-top: 0; border-bottom: 2px solid #1a73e8; padding-bottom: 10px; }
 
-        /* Area Drag & Drop */
         #drop-area {
-            border: 3px dashed #1a73e8;
-            border-radius: 15px;
-            padding: 40px;
-            text-align: center;
-            background: #f8fbff;
-            transition: all 0.3s;
-            cursor: pointer;
-            margin-bottom: 20px;
+            border: 3px dashed #1a73e8; border-radius: 15px; padding: 30px;
+            text-align: center; background: #f8fbff; cursor: pointer; margin-bottom: 20px;
         }
-        #drop-area.highlight { background: #e1efff; border-color: #0d47a1; }
-        #drop-area p { font-size: 1.2rem; color: #1a73e8; margin: 0; }
+        #drop-area.highlight { background: #e1efff; }
 
-        .btn-export {
-            background-color: #27ae60;
-            color: white;
-            padding: 12px 25px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1rem;
-            display: none; /* Nascosto finché non c'è un file */
-            margin-bottom: 20px;
+        .filter-section {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px; margin-bottom: 20px; padding: 20px;
+            background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; display: none;
         }
-        .btn-export:hover { background-color: #219150; }
+        .filter-group label { display: block; font-size: 0.8rem; font-weight: bold; color: #555; margin-bottom: 5px; text-transform: uppercase; }
+        .filter-group input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
 
-        .table-wrapper { overflow-x: auto; margin-top: 20px; border: 1px solid #ddd; }
-        table { border-collapse: collapse; width: 100%; background: white; white-space: pre; }
-        th { background-color: #1a73e8; color: white; padding: 12px; border: 1px solid #ddd; }
-        td { padding: 8px; border: 1px solid #ddd; font-size: 12px; }
+        .actions { margin-bottom: 20px; display: flex; align-items: center; gap: 20px; }
+        .btn-export { background-color: #27ae60; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; display: none; }
+        #counter { font-weight: bold; color: #555; }
         
-        .row-metadata { background-color: #fff9c4; } /* Prime 5 righe */
-        .row-reference { background-color: #bbdefb; font-weight: bold; } /* Riga 6 */
+        .table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 600px; }
+        table { border-collapse: collapse; width: 100%; background: white; white-space: pre; }
+        th { background-color: #1a73e8; color: white; padding: 12px; position: sticky; top: 0; z-index: 10; border: 1px solid #ddd; }
+        td { padding: 8px; border: 1px solid #ddd; font-size: 12px; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .hidden-row { display: none; }
     </style>
 </head>
 <body>
@@ -53,15 +42,18 @@
     <h1>CONTROLLO PARTENZE</h1>
     
     <div id="drop-area">
-        <p>Trascina qui il file "bolle" o clicca per selezionarlo</p>
-        <input type="file" id="fileElem" accept="*/*" style="display:none" onchange="handleFiles(this.files)">
+        <p>Trascina il file qui o clicca per selezionarlo</p>
+        <input type="file" id="fileElem" style="display:none" onchange="handleFiles(this.files)">
     </div>
 
-    <button id="exportBtn" class="btn-export" onclick="exportToExcel()">📥 Scarica in Excel (.xlsx)</button>
+    <div id="filterContainer" class="filter-section"></div>
 
-    <div id="stato"></div>
+    <div class="actions">
+        <button id="exportBtn" class="btn-export" onclick="exportFilteredData()">📥 Esporta Solo Validi (.xlsx)</button>
+        <div id="counter"></div>
+    </div>
 
-    <div class="table-wrapper" id="tableWrapper" style="display:none;">
+    <div id="tableWrapper" class="table-wrapper" style="display:none;">
         <table id="mainTable">
             <thead id="tableHead"></thead>
             <tbody id="tableBody"></tbody>
@@ -71,110 +63,127 @@
 
 <script>
     let dropArea = document.getElementById('drop-area');
-    let exportBtn = document.getElementById('exportBtn');
-    let currentData = []; // Variabile per salvare i dati per l'export
+    let allData = []; 
+    let columns = [];
 
-    // Impedisci comportamenti di default del browser per il drag&drop
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, preventDefaults, false);
-    });
-
-    function preventDefaults (e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-
-    // Effetti visivi al trascinamento
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropArea.addEventListener(eventName, () => dropArea.classList.add('highlight'), false);
-    });
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, () => dropArea.classList.remove('highlight'), false);
-    });
-
-    // Gestione del rilascio file
-    dropArea.addEventListener('drop', (e) => {
-        let dt = e.dataTransfer;
-        let files = dt.files;
-        handleFiles(files);
-    }, false);
-
-    // Clic per aprire selettore file
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => dropArea.addEventListener(e, (ev) => ev.preventDefault()));
+    dropArea.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
     dropArea.addEventListener('click', () => document.getElementById('fileElem').click());
 
     function handleFiles(files) {
-        let file = files[0];
         let reader = new FileReader();
-        
-        reader.onload = function(e) {
-            processContent(e.target.result);
-        };
-        reader.readAsText(file);
+        reader.onload = (e) => processContent(e.target.result);
+        reader.readAsText(files[0]);
     }
 
     function processContent(text) {
         const lines = text.split(/\r?\n/);
-        if (lines.length < 6) return alert("File troppo corto");
+        if (lines.length < 6) return alert("File non valido");
 
-        // 1. Analisi Struttura (Riga 6)
+        // 1. Analisi Struttura (Riga 6 posizioni, Riga 5 nomi filtri)
         const refLine = lines[5];
-        const cols = [];
+        const filterNamesLine = lines[4]; 
+        columns = [];
         const regex = /\S+/g;
         let match;
+
         while ((match = regex.exec(refLine)) !== null) {
-            cols.push({ nome: match[0], start: match.index });
+            let filterLabel = filterNamesLine.substring(match.index, match.index + 20).trim();
+            columns.push({ 
+                id: match[0], 
+                label: filterLabel || match[0],
+                start: match.index 
+            });
         }
-        for (let i = 0; i < cols.length; i++) {
-            cols[i].end = cols[i+1] ? cols[i+1].start : 1000;
+        for (let i = 0; i < columns.length; i++) {
+            columns[i].end = columns[i+1] ? columns[i+1].start : 2000;
         }
 
-        // 2. Popolamento Tabella e Array Dati
-        const head = document.getElementById('tableHead');
+        // Trova l'indice della colonna "Autista" o l'ultima colonna
+        const indexAutista = columns.length - 1;
+
+        // 2. Genera Filtri UI
+        const filterContainer = document.getElementById('filterContainer');
+        filterContainer.innerHTML = "";
+        columns.forEach(col => {
+            const group = document.createElement('div');
+            group.className = 'filter-group';
+            group.innerHTML = `<label>${col.label}</label>
+                               <input type="text" placeholder="Filtra..." oninput="applyFilters()">`;
+            filterContainer.appendChild(group);
+        });
+        filterContainer.style.display = 'grid';
+
+        // 3. Carica Dati con FILTRO RIGHE VUOTE IN "AUTISTA"
+        allData = [];
         const body = document.getElementById('tableBody');
-        head.innerHTML = "<tr>" + cols.map(c => `<th>${c.nome}</th>`).join('') + "</tr>";
+        const head = document.getElementById('tableHead');
+        head.innerHTML = "<tr>" + columns.map(c => `<th>${c.label}</th>`).join('') + "</tr>";
         body.innerHTML = "";
-        currentData = [];
 
-        lines.forEach((line, idx) => {
-            if (line.trim() === "") return;
+        lines.slice(6).forEach(line => {
+            if (line.trim() === "" || line.includes("-------")) return;
             
-            let rowData = {};
-            const tr = document.createElement('tr');
-            if (idx < 5) tr.className = "row-metadata";
-            if (idx === 5) tr.className = "row-reference";
+            // Estraiamo il valore della colonna Autista per il controllo
+            let valAutista = line.substring(columns[indexAutista].start, columns[indexAutista].end).trim();
+            
+            // SE LA COLONNA AUTISTA È VUOTA, SALTA LA RIGA
+            if (valAutista === "") return;
 
-            cols.forEach((c, cIdx) => {
+            let rowObj = { _cells: [] };
+            const tr = document.createElement('tr');
+            
+            columns.forEach(c => {
                 let val = line.substring(c.start, c.end).trim();
-                if (idx < 5 && cIdx === 0 && val === "") val = line.trim(); // Recupero info intestazione
-                
+                rowObj._cells.push(val.toLowerCase());
                 const td = document.createElement('td');
                 td.innerText = val;
                 tr.appendChild(td);
-                rowData[c.nome] = val; // Salviamo per Excel
             });
             
+            rowObj._el = tr;
             body.appendChild(tr);
-            currentData.push(rowData);
+            allData.push(rowObj);
         });
 
         document.getElementById('tableWrapper').style.display = "block";
-        exportBtn.style.display = "inline-block";
-        document.getElementById('stato').innerText = "File pronto per l'esportazione.";
+        document.getElementById('exportBtn').style.display = "inline-block";
+        updateCounter();
     }
 
-    // FUNZIONE ESPORTAZIONE EXCEL
-    function exportToExcel() {
-        if (currentData.length === 0) return;
-        
-        // Creiamo un foglio di lavoro (worksheet) dai dati
-        const ws = XLSX.utils.json_to_sheet(currentData);
+    function applyFilters() {
+        const inputs = document.querySelectorAll('.filter-group input');
+        const searchTerms = Array.from(inputs).map(i => i.value.toLowerCase());
+
+        allData.forEach(row => {
+            let isVisible = searchTerms.every((term, index) => {
+                if (!term) return true;
+                return row._cells[index].includes(term);
+            });
+            row._el.className = isVisible ? "" : "hidden-row";
+        });
+        updateCounter();
+    }
+
+    function updateCounter() {
+        const visibleCount = allData.filter(r => r._el.className !== "hidden-row").length;
+        document.getElementById('counter').innerText = `Spedizioni trovate: ${visibleCount}`;
+    }
+
+    function exportFilteredData() {
+        const visibleData = allData.filter(row => row._el.className !== "hidden-row").map(row => {
+            let exportRow = {};
+            columns.forEach((col, idx) => {
+                exportRow[col.label] = row._el.cells[idx].innerText;
+            });
+            return exportRow;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(visibleData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Dati_Elaborati");
-        
-        // Generiamo il file e facciamo partire il download
-        XLSX.writeFile(wb, "Controllo_Partenze.xlsx");
+        XLSX.utils.book_append_sheet(wb, ws, "Spedizioni_Pulite");
+        XLSX.writeFile(wb, "Controllo_Partenze_Filtrato.xlsx");
     }
 </script>
-
 </body>
 </html>
